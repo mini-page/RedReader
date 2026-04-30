@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../features/library/data/session_repository.dart';
+import '../../library/data/session_repository.dart';
 import '../../../shared/models/session.dart';
 import '../domain/reader_engine.dart';
 import '../domain/token.dart';
@@ -40,11 +40,21 @@ class ReaderState {
       );
 }
 
-class ReaderController extends StateNotifier<ReaderState> {
-  ReaderController(this._repo)
-      : super(const ReaderState(sessionId: '', title: '', content: '', tokens: [], index: 0, wpm: 550, isPlaying: false));
+class ReaderController extends Notifier<ReaderState> {
+  @override
+  ReaderState build() {
+    return const ReaderState(
+      sessionId: '',
+      title: '',
+      content: '',
+      tokens: [],
+      index: 0,
+      wpm: 550,
+      isPlaying: false,
+    );
+  }
 
-  final SessionRepository _repo;
+  SessionRepository get _repo => ref.read(sessionRepositoryProvider);
   Timer? _timer;
   DateTime? _nextTickAt;
 
@@ -138,4 +148,4 @@ class ReaderController extends StateNotifier<ReaderState> {
 }
 
 final sessionRepositoryProvider = Provider<SessionRepository>((ref) => SessionRepository());
-final readerProvider = StateNotifierProvider<ReaderController, ReaderState>((ref) => ReaderController(ref.read(sessionRepositoryProvider)));
+final readerProvider = NotifierProvider<ReaderController, ReaderState>(ReaderController.new);

@@ -4,9 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../shared/models/app_settings.dart';
 
-class SettingsController extends StateNotifier<AppSettings> {
-  SettingsController() : super(const AppSettings()) {
+class SettingsController extends Notifier<AppSettings> {
+  @override
+  AppSettings build() {
     load();
+    return const AppSettings();
   }
 
   Future<void> load() async {
@@ -31,4 +33,4 @@ class SettingsController extends StateNotifier<AppSettings> {
   }
 }
 
-final settingsProvider = StateNotifierProvider<SettingsController, AppSettings>((ref) => SettingsController());
+final settingsProvider = NotifierProvider<SettingsController, AppSettings>(SettingsController.new);

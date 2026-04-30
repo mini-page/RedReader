@@ -5,9 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/demo_text.dart';
-import '../../../library/data/session_repository.dart';
-import '../../../reader/presentation/reader_controller.dart';
+import '../../../core/constants/demo_text.dart';
+import '../../reader/presentation/reader_controller.dart';
 import '../../../shared/models/session.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -62,7 +61,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   return Card(
                     child: ListTile(
                       title: Text(s.title),
-                      subtitle: Text('${s.position + 1} / ${s.content.split(RegExp(r'\\s+')).length} • ${s.wpm} wpm'),
+                      subtitle: Text('${s.position + 1} / ${s.content.split(RegExp(r'\s+')).length} • ${s.wpm} wpm'),
                       onTap: () async {
                         await ref.read(readerProvider.notifier).loadSession(s);
                         if (mounted) context.push('/reader');
@@ -108,7 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _pickTxt() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['txt']);
+    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['txt']);
     if (result == null || result.files.single.path == null) return;
     final path = result.files.single.path!;
     final content = await File(path).readAsString();
