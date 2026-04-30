@@ -31,6 +31,7 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (v) => controller.update(settings.copyWith(pauseOnPunctuation: v)),
           ),
           DropdownButtonFormField<ThemeMode>(
+            initialValue: settings.themeMode,
             value: settings.themeMode,
             decoration: const InputDecoration(labelText: 'Theme'),
             items: const [
