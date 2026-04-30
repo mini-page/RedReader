@@ -32,6 +32,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           DropdownButtonFormField<ThemeMode>(
             initialValue: settings.themeMode,
+            value: settings.themeMode,
             decoration: const InputDecoration(labelText: 'Theme'),
             items: const [
               DropdownMenuItem(value: ThemeMode.system, child: Text('System')),

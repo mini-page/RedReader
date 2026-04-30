@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/demo_text.dart';
-import '../../library/data/session_repository.dart';
-import '../../reader/presentation/reader_controller.dart';
+import '../../../library/data/session_repository.dart';
+import '../../../reader/presentation/reader_controller.dart';
 import '../../../shared/models/session.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -108,7 +108,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _pickTxt() async {
-    final result = await FilePicker().pickFiles(type: FileType.custom, allowedExtensions: ['txt']);
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['txt']);
     if (result == null || result.files.single.path == null) return;
     final path = result.files.single.path!;
     final content = await File(path).readAsString();

@@ -17,7 +17,15 @@ class ReaderState {
   final int wpm;
   final bool isPlaying;
 
-  const ReaderState({required this.sessionId, required this.title, required this.content, required this.tokens, required this.index, required this.wpm, required this.isPlaying});
+  const ReaderState({
+    required this.sessionId,
+    required this.title,
+    required this.content,
+    required this.tokens,
+    required this.index,
+    required this.wpm,
+    required this.isPlaying,
+  });
 
   Token? get current => tokens.isEmpty ? null : tokens[index.clamp(0, tokens.length - 1)];
 
@@ -32,26 +40,39 @@ class ReaderState {
       );
 }
 
-class ReaderController extends Notifier<ReaderState> {
+class ReaderController extends StateNotifier<ReaderState> {
+  ReaderController(this._repo)
+      : super(const ReaderState(sessionId: '', title: '', content: '', tokens: [], index: 0, wpm: 550, isPlaying: false));
+
+  final SessionRepository _repo;
   Timer? _timer;
   DateTime? _nextTickAt;
-
-  SessionRepository get _repo => ref.read(sessionRepositoryProvider);
-
-  @override
-  ReaderState build() {
-    return const ReaderState(sessionId: '', title: '', content: '', tokens: [], index: 0, wpm: 550, isPlaying: false);
-  }
 
   Future<void> loadText(String title, String content, {int? start, int? wpm}) async {
     final tokens = tokenizeText(content);
     final id = DateTime.now().millisecondsSinceEpoch.toString();
-    state = state.copyWith(sessionId: id, title: title, content: content, tokens: tokens, index: start ?? 0, wpm: wpm ?? state.wpm, isPlaying: false);
+    state = state.copyWith(
+      sessionId: id,
+      title: title,
+      content: content,
+      tokens: tokens,
+      index: start ?? 0,
+      wpm: wpm ?? state.wpm,
+      isPlaying: false,
+    );
     await _persist();
   }
 
   Future<void> loadSession(Session s) async {
-    state = state.copyWith(sessionId: s.id, title: s.title, content: s.content, tokens: tokenizeText(s.content), index: s.position, wpm: s.wpm, isPlaying: false);
+    state = state.copyWith(
+      sessionId: s.id,
+      title: s.title,
+      content: s.content,
+      tokens: tokenizeText(s.content),
+      index: s.position,
+      wpm: s.wpm,
+      isPlaying: false,
+    );
   }
 
   void play() {
@@ -66,7 +87,9 @@ class ReaderController extends Notifier<ReaderState> {
     await _persist();
   }
 
-  void setWpm(double value) => state = state.copyWith(wpm: value.round());
+  void setWpm(double value) {
+    state = state.copyWith(wpm: value.round());
+  }
 
   Future<void> next() async {
     if (state.tokens.isEmpty) return;
@@ -93,17 +116,26 @@ class ReaderController extends Notifier<ReaderState> {
       return;
     }
     state = state.copyWith(index: state.index + 1);
+    final base = baseDelayForWpm(state.wpm);
+    final delay = adjustDelay(state.current!.word, base);
     final now = DateTime.now();
-    final ideal = (_nextTickAt ?? now).add(adjustDelay(state.current!.word, baseDelayForWpm(state.wpm)));
+    final ideal = (_nextTickAt ?? now).add(delay);
     final driftAware = ideal.difference(now);
     _scheduleNextTick(driftAware.isNegative ? Duration.zero : driftAware);
   }
 
   Future<void> _persist() async {
     if (state.sessionId.isEmpty) return;
-    await _repo.save(Session(id: state.sessionId, title: state.title, content: state.content, position: state.index, wpm: state.wpm, updatedAt: DateTime.now()));
+    await _repo.save(Session(
+      id: state.sessionId,
+      title: state.title,
+      content: state.content,
+      position: state.index,
+      wpm: state.wpm,
+      updatedAt: DateTime.now(),
+    ));
   }
 }
 
 final sessionRepositoryProvider = Provider<SessionRepository>((ref) => SessionRepository());
-final readerProvider = NotifierProvider<ReaderController, ReaderState>(ReaderController.new);
+final readerProvider = StateNotifierProvider<ReaderController, ReaderState>((ref) => ReaderController(ref.read(sessionRepositoryProvider)));
