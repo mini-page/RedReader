@@ -6,11 +6,13 @@ import '../../reader/presentation/reader_controller.dart';
 import '../../settings/presentation/settings_controller.dart';
 
 class PreviewScreen extends ConsumerStatefulWidget {
+  final String? sessionId;
   final String initialTitle;
   final String initialContent;
 
   const PreviewScreen({
     super.key,
+    this.sessionId,
     required this.initialTitle,
     required this.initialContent,
   });
@@ -37,6 +39,51 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
     super.dispose();
   }
 
+  Future<void> _saveSession(bool startReading) async {
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    final settings = ref.read(settingsProvider);
+
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please provide a title.')),
+      );
+      return;
+    }
+
+    if (content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Content cannot be empty.')),
+      );
+      return;
+    }
+
+    if (widget.sessionId != null) {
+      await ref
+          .read(sessionRepositoryProvider)
+          .update(widget.sessionId!, title: title, content: content);
+    }
+
+    if (startReading) {
+      await ref
+          .read(readerProvider.notifier)
+          .loadText(title, content, wpm: settings.defaultWpm);
+      if (mounted) context.pushReplacement('/reader');
+    } else {
+      if (widget.sessionId == null) {
+        await ref
+            .read(sessionRepositoryProvider)
+            .create(title: title, content: content, wpm: settings.defaultWpm);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session saved to library.')),
+        );
+        context.pop();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
@@ -56,11 +103,18 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
               context, Icons.arrow_back_rounded, () => context.pop(), isDark),
         ),
         title: Text(
-          'Preview Extraction',
+          widget.sessionId != null ? 'Edit Document' : 'Preview Extraction',
           style: TextStyle(
               color: onSurface, fontWeight: FontWeight.bold, fontSize: 20),
         ),
         centerTitle: true,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: _buildCircleButton(context, Icons.check_rounded,
+                () => _saveSession(false), isDark),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -124,33 +178,7 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20)),
                 ),
-                onPressed: () async {
-                  final title = _titleController.text.trim();
-                  final content = _contentController.text.trim();
-
-                  if (title.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text(
-                              'Please provide a title for your document.')),
-                    );
-                    return;
-                  }
-
-                  if (content.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Content cannot be empty.')),
-                    );
-                    return;
-                  }
-
-                  await ref
-                      .read(readerProvider.notifier)
-                      .loadText(title, content, wpm: settings.defaultWpm);
-                  if (context.mounted) {
-                    context.pushReplacement('/reader');
-                  }
-                },
+                onPressed: () => _saveSession(true),
                 child: const Text('Start Reading',
                     style: TextStyle(
                         fontSize: 18,

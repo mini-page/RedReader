@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +14,7 @@ class SettingsController extends Notifier<AppSettings> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    final hideStatusBar = prefs.getBool('hideStatusBar') ?? state.hideStatusBar;
     state = state.copyWith(
       defaultWpm: prefs.getInt('defaultWpm') ?? state.defaultWpm,
       defaultChunkSize:
@@ -28,10 +30,21 @@ class SettingsController extends Notifier<AppSettings> {
       hasCompletedOnboarding: prefs.getBool('hasCompletedOnboarding') ??
           state.hasCompletedOnboarding,
       hasRunDemo: prefs.getBool('hasRunDemo') ?? state.hasRunDemo,
+      hideStatusBar: hideStatusBar,
     );
+    _applySystemUi(hideStatusBar);
+  }
+
+  void _applySystemUi(bool hide) {
+    if (hide) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
   }
 
   Future<void> update(AppSettings next) async {
+    final hideStatusBarChanged = state.hideStatusBar != next.hideStatusBar;
     state = next;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('defaultWpm', next.defaultWpm);
@@ -44,6 +57,11 @@ class SettingsController extends Notifier<AppSettings> {
     await prefs.setString('fontFamily', next.fontFamily);
     await prefs.setBool('hasCompletedOnboarding', next.hasCompletedOnboarding);
     await prefs.setBool('hasRunDemo', next.hasRunDemo);
+    await prefs.setBool('hideStatusBar', next.hideStatusBar);
+
+    if (hideStatusBarChanged) {
+      _applySystemUi(next.hideStatusBar);
+    }
   }
 
   Future<void> completeOnboarding() async {
@@ -52,6 +70,13 @@ class SettingsController extends Notifier<AppSettings> {
 
   Future<void> completeDemo() async {
     await update(state.copyWith(hasRunDemo: true));
+  }
+
+  Future<void> resetAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    state = AppSettings.initial();
+    _applySystemUi(state.hideStatusBar);
   }
 }
 

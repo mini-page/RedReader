@@ -11,19 +11,23 @@ class AppSettings {
   final String fontFamily;
   final bool hasCompletedOnboarding;
   final bool hasRunDemo;
+  final bool hideStatusBar;
 
   const AppSettings({
-    this.defaultWpm = 300,
+    this.defaultWpm = 350,
     this.defaultChunkSize = 1,
-    this.fontSize = 56,
+    this.fontSize = 48,
     this.pauseOnPunctuation = true,
     this.orpColorValue = 0xFFFF3B3B,
-    this.themeMode = ThemeMode.light,
+    this.themeMode = ThemeMode.dark,
     this.showOledBlack = true,
     this.fontFamily = 'Inter',
     this.hasCompletedOnboarding = false,
     this.hasRunDemo = false,
+    this.hideStatusBar = false,
   });
+
+  factory AppSettings.initial() => const AppSettings();
 
   AppSettings copyWith({
     int? defaultWpm,
@@ -36,6 +40,7 @@ class AppSettings {
     String? fontFamily,
     bool? hasCompletedOnboarding,
     bool? hasRunDemo,
+    bool? hideStatusBar,
   }) =>
       AppSettings(
         defaultWpm: defaultWpm ?? this.defaultWpm,
@@ -49,5 +54,6 @@ class AppSettings {
         hasCompletedOnboarding:
             hasCompletedOnboarding ?? this.hasCompletedOnboarding,
         hasRunDemo: hasRunDemo ?? this.hasRunDemo,
+        hideStatusBar: hideStatusBar ?? this.hideStatusBar,
       );
 }

@@ -122,6 +122,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               isDark: isDark,
             ),
             _buildDivider(isDark),
+            _buildSwitchTile(
+              title: 'Hide status bar',
+              subtitle: 'Immersive mode',
+              value: settings.hideStatusBar,
+              onChanged: (v) =>
+                  controller.update(settings.copyWith(hideStatusBar: v)),
+              isDark: isDark,
+            ),
+            _buildDivider(isDark),
             _buildColorPicker(
               title: 'Focal letter color',
               subtitle: 'The letter your eye locks onto',
@@ -160,6 +169,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     color: Color(0xFFFF3B3B), size: 20),
               ),
               onTap: () => _showClearDialog(context, ref),
+            ),
+            _buildDivider(isDark),
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              title: const Text('Reset Everything',
+                  style: TextStyle(
+                      color: Color(0xFFFF3B3B), fontWeight: FontWeight.bold)),
+              subtitle: Text('Restore app to initial state',
+                  style: TextStyle(color: onSurface.withValues(alpha: 0.4))),
+              trailing: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFFF3B3B).withValues(alpha: 0.1),
+                    shape: BoxShape.circle),
+                child: const Icon(Icons.refresh_rounded,
+                    color: Color(0xFFFF3B3B), size: 20),
+              ),
+              onTap: () => _showResetDialog(context, ref),
             ),
           ], isDark),
           const SizedBox(height: 32),
@@ -653,6 +681,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showResetDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1C1C1E)
+            : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Reset Everything?'),
+        content: const Text(
+            'This will clear your entire library and reset all settings to their initial state. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF3B3B),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              await ref.read(sessionRepositoryProvider).clearAll();
+              await ref.read(settingsProvider.notifier).resetAll();
+              if (context.mounted) {
+                Navigator.pop(context);
+                context.go('/splash');
+              }
+            },
+            child: const Text('Reset All'),
+          ),
+        ],
       ),
     );
   }

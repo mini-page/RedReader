@@ -5,6 +5,7 @@ import 'package:docx_to_text/docx_to_text.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -85,35 +86,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, onSurface, isDark),
-                  const SizedBox(height: 32),
-                  if (latestSession != null) ...[
-                    _buildContinueReading(latestSession, onSurface, isDark),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildActionGrid(onSurface, isDark),
-                  const SizedBox(height: 24),
-                  if (!settings.hasRunDemo) ...[
-                    _buildDemoBar(onSurface, isDark),
-                    const SizedBox(height: 40),
-                  ],
-                  _buildLibraryHeader(onSurface, isDark),
-                  const SizedBox(height: 16),
-                  if (sessions.isEmpty)
-                    _buildEmptyLibrary(onSurface, isDark)
-                  else
-                    ..._filteredSessions
-                        .skip((latestSession != null && _searchQuery.isEmpty)
-                            ? 1
-                            : 0)
-                        .map((s) => _buildSessionCard(s, onSurface, isDark)),
-                ],
-              ),
+            CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  pinned: true,
+                  floating: false,
+                  elevation: 0,
+                  scrolledUnderElevation: 0,
+                  backgroundColor: isDark
+                      ? (settings.showOledBlack
+                          ? Colors.black
+                          : const Color(0xFF121212))
+                      : const Color(0xFFF6F6F6),
+                  toolbarHeight: 80,
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      alignment: Alignment.center,
+                      child: _buildHeader(context, onSurface, isDark),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      if (latestSession != null && _searchQuery.isEmpty) ...[
+                        _buildContinueReading(latestSession, onSurface, isDark),
+                        const SizedBox(height: 24),
+                      ],
+                      _buildActionGrid(onSurface, isDark),
+                      const SizedBox(height: 24),
+                      if (!settings.hasRunDemo) ...[
+                        _buildDemoBar(onSurface, isDark),
+                        const SizedBox(height: 40),
+                      ],
+                      _buildLibraryHeader(onSurface, isDark),
+                      const SizedBox(height: 16),
+                      if (sessions.isEmpty)
+                        _buildEmptyLibrary(onSurface, isDark)
+                      else
+                        ..._filteredSessions
+                            .skip((latestSession != null && _searchQuery.isEmpty)
+                                ? 1
+                                : 0)
+                            .map((s) => _buildSessionCard(s, onSurface, isDark)),
+                      const SizedBox(height: 100), // Bottom padding
+                    ]),
+                  ),
+                ),
+              ],
             ),
             if (_isExtracting) _buildExtractionOverlay(),
           ],
@@ -130,10 +153,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 10.0),
-          child: Image.asset(
-            isDark ? 'assets/images/transparent_white_icon.png' : 'assets/images/transparent_black_icon.png',
-            width: 32,
-            height: 32,
+          child: GestureDetector(
+            onTap: () => _showBrandingTooltip(context, isDark),
+            child: Image.asset(
+              isDark
+                  ? 'assets/images/transparent_white_icon.png'
+                  : 'assets/images/transparent_black_icon.png',
+              width: 32,
+              height: 32,
+            ),
           ),
         ),
         Row(
@@ -155,6 +183,79 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  void _showBrandingTooltip(BuildContext context, bool isDark) {
+    final onSurface = isDark ? Colors.white : Colors.black;
+    final cardColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+
+    showDialog(
+      context: context,
+      builder: (context) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 40,
+                offset: const Offset(0, 20),
+              )
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF3B3B).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.bolt_rounded,
+                      color: Color(0xFFFF3B3B), size: 32),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'What is iReader?',
+                  style: TextStyle(
+                    color: onSurface,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'iReader is a "Flash Fast" reading tool designed to eliminate eye movement and maximize focus. By showing words in rapid succession at a single focal point, it allows you to process information at lightning speeds without distraction.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: onSurface.withValues(alpha: 0.6),
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFFF3B3B),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 32, vertical: 12),
+                  ),
+                  child: const Text('Got it',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -331,7 +432,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const Color(0xFFFF3B3B),
             onSurface,
             isDark,
-            () => context.push('/preview', extra: {'title': '', 'content': ''}),
+            () => context.push('/preview',
+                extra: {'title': '', 'content': '', 'id': null}),
           ),
         ),
         const SizedBox(width: 16),
@@ -498,7 +600,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(width: 12),
             GestureDetector(
-              onTap: _showSortPopup,
+              onTapDown: (details) => _showSortPopup(details.globalPosition),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -517,67 +619,85 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _showSortPopup() {
+  void _showSortPopup(Offset tapPosition) {
     final settings = ref.read(settingsProvider);
     final isDark = settings.themeMode == ThemeMode.dark;
 
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (context) => StatefulBuilder(builder: (context, setPopupState) {
-        return Stack(
-          children: [
-            Positioned(
-              top: 250, // Approximate position below search bar
-              left: 20,
-              right: 20,
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 40)
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildSortOption('Title', LibrarySortType.title),
-                      _buildSortOption('Date', LibrarySortType.date),
-                      _buildSortOption('Words Count', LibrarySortType.size),
-                      _buildSortOption('Progress', LibrarySortType.progress),
-                    ],
+      barrierDismissible: true,
+      barrierLabel: 'SortPopup',
+      barrierColor: Colors.black.withValues(alpha: 0.2),
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        return FadeTransition(
+          opacity: anim1,
+          child: ScaleTransition(
+            scale: anim1,
+            alignment: Alignment.topRight,
+            child: Stack(
+              children: [
+                Positioned(
+                  top: tapPosition.dy + 10,
+                  right: 20,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: 220,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 40,
+                            offset: const Offset(0, 10),
+                          )
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildSortTile('Title', LibrarySortType.title),
+                          _buildSortTile('Date', LibrarySortType.date),
+                          _buildSortTile('Words Count', LibrarySortType.size),
+                          _buildSortTile('Progress', LibrarySortType.progress),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         );
-      }),
+      },
     );
   }
 
-  Widget _buildSortOption(String label, LibrarySortType type) {
+  Widget _buildSortTile(String label, LibrarySortType type) {
     final isSelected = _sortType == type;
     final isDark = ref.read(settingsProvider).themeMode == ThemeMode.dark;
     final onSurface = isDark ? Colors.white : Colors.black;
 
     return ListTile(
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
       title: Text(label,
           style: TextStyle(
               color: isSelected ? const Color(0xFFFF3B3B) : onSurface,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 14)),
       trailing: isSelected
           ? Icon(
               _isAscending
                   ? Icons.arrow_upward_rounded
                   : Icons.arrow_downward_rounded,
               color: const Color(0xFFFF3B3B),
-              size: 18)
+              size: 16)
           : null,
       onTap: () {
         setState(() {
@@ -600,6 +720,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
@@ -612,45 +733,109 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     offset: const Offset(0, 2))
               ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          ListTile(
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            title: Text(
-              session.title,
-              style: TextStyle(color: onSurface, fontWeight: FontWeight.bold),
+      child: Slidable(
+        key: ValueKey(session.id),
+        endActionPane: ActionPane(
+          motion: const ScrollMotion(),
+          extentRatio: 0.45,
+          children: [
+            SlidableAction(
+              onPressed: (context) async {
+                final navigator = GoRouter.of(context);
+                await navigator.push('/preview', extra: {
+                  'id': session.id,
+                  'title': session.title,
+                  'content': session.content
+                });
+                if (mounted) _loadSessions();
+              },
+              backgroundColor: const Color(0xFF2196F3),
+              foregroundColor: Colors.white,
+              icon: Icons.edit_rounded,
+              label: 'Edit',
+              padding: EdgeInsets.zero,
             ),
-            subtitle: Text(
-              '${(progress * 100).toInt()}% • $totalWords words • ${session.wpm} wpm',
-              style: TextStyle(
-                  color: onSurface.withValues(alpha: 0.5), fontSize: 13),
+            SlidableAction(
+              onPressed: (context) => _showDeleteDialog(session),
+              backgroundColor: const Color(0xFFFF3B3B),
+              foregroundColor: Colors.white,
+              icon: Icons.delete_rounded,
+              label: 'Del',
+              padding: EdgeInsets.zero,
             ),
-            trailing: Icon(Icons.chevron_right,
-                color: onSurface.withValues(alpha: 0.2)),
-            onTap: () async {
-              await ref.read(readerProvider.notifier).loadSession(session);
-              if (mounted) {
-                await context.push('/reader');
-                _loadSessions();
-              }
-            },
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 3,
-              width: double.infinity,
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: progress,
-                child: Container(
-                    color: const Color(0xFFFF3B3B).withValues(alpha: 0.7)),
+          ],
+        ),
+        child: Stack(
+          children: [
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              title: Text(
+                session.title,
+                style: TextStyle(color: onSurface, fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                '${(progress * 100).toInt()}% • $totalWords words • ${session.wpm} wpm',
+                style: TextStyle(
+                    color: onSurface.withValues(alpha: 0.5), fontSize: 13),
+              ),
+              trailing: Icon(Icons.chevron_right,
+                  color: onSurface.withValues(alpha: 0.2)),
+              onTap: () async {
+                await ref.read(readerProvider.notifier).loadSession(session);
+                if (mounted) {
+                  await context.push('/reader');
+                  _loadSessions();
+                }
+              },
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 3,
+                width: double.infinity,
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: progress,
+                  child: Container(
+                      color: const Color(0xFFFF3B3B).withValues(alpha: 0.7)),
+                ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteDialog(Session session) {
+    final isDark = ref.read(settingsProvider).themeMode == ThemeMode.dark;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Delete Session?'),
+        content: Text('Are you sure you want to delete "${session.title}"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF3B3B),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              final repo = ref.read(sessionRepositoryProvider);
+              final navigator = Navigator.of(context);
+              await repo.delete(session.id);
+              navigator.pop();
+              if (mounted) _loadSessions();
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -736,8 +921,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     if (content.trim().isNotEmpty) {
       if (mounted) {
-        await context
-            .push('/preview', extra: {'title': title, 'content': content});
+        await context.push('/preview',
+            extra: {'title': title, 'content': content, 'id': null});
         _loadSessions();
       }
     }
