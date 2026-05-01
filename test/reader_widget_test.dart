@@ -7,6 +7,7 @@ void main() {
   testWidgets('reader screen renders controls', (tester) async {
     await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: ReaderScreen())));
     expect(find.byType(Slider), findsOneWidget);
-    expect(find.byIcon(Icons.play_circle), findsOneWidget);
+    // New UI uses Icons.play_arrow_rounded when not playing
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
   });
 }

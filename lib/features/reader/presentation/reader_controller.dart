@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../library/data/session_repository.dart';
+import '../../settings/presentation/settings_controller.dart';
 import '../../../shared/models/session.dart';
 import '../domain/reader_engine.dart';
 import '../domain/token.dart';
@@ -16,6 +17,7 @@ class ReaderState {
   final int index;
   final int wpm;
   final bool isPlaying;
+  final int chunkSize;
 
   const ReaderState({
     required this.sessionId,
@@ -25,11 +27,26 @@ class ReaderState {
     required this.index,
     required this.wpm,
     required this.isPlaying,
+    this.chunkSize = 1,
   });
 
-  Token? get current => tokens.isEmpty ? null : tokens[index.clamp(0, tokens.length - 1)];
+  List<Token> get current {
+    if (tokens.isEmpty) return [];
+    final end = (index + chunkSize).clamp(0, tokens.length);
+    return tokens.sublist(index, end);
+  }
 
-  ReaderState copyWith({String? sessionId, String? title, String? content, List<Token>? tokens, int? index, int? wpm, bool? isPlaying}) => ReaderState(
+  ReaderState copyWith({
+    String? sessionId,
+    String? title,
+    String? content,
+    List<Token>? tokens,
+    int? index,
+    int? wpm,
+    bool? isPlaying,
+    int? chunkSize,
+  }) =>
+      ReaderState(
         sessionId: sessionId ?? this.sessionId,
         title: title ?? this.title,
         content: content ?? this.content,
@@ -37,20 +54,23 @@ class ReaderState {
         index: index ?? this.index,
         wpm: wpm ?? this.wpm,
         isPlaying: isPlaying ?? this.isPlaying,
+        chunkSize: chunkSize ?? this.chunkSize,
       );
 }
 
 class ReaderController extends Notifier<ReaderState> {
   @override
   ReaderState build() {
-    return const ReaderState(
+    final settings = ref.watch(settingsProvider);
+    return ReaderState(
       sessionId: '',
       title: '',
       content: '',
       tokens: [],
       index: 0,
-      wpm: 550,
+      wpm: settings.defaultWpm,
       isPlaying: false,
+      chunkSize: settings.defaultChunkSize,
     );
   }
 
@@ -61,13 +81,15 @@ class ReaderController extends Notifier<ReaderState> {
   Future<void> loadText(String title, String content, {int? start, int? wpm}) async {
     final tokens = tokenizeText(content);
     final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final settings = ref.read(settingsProvider);
     state = state.copyWith(
       sessionId: id,
       title: title,
       content: content,
       tokens: tokens,
       index: start ?? 0,
-      wpm: wpm ?? state.wpm,
+      wpm: wpm ?? settings.defaultWpm,
+      chunkSize: settings.defaultChunkSize,
       isPlaying: false,
     );
     await _persist();
@@ -101,15 +123,31 @@ class ReaderController extends Notifier<ReaderState> {
     state = state.copyWith(wpm: value.round());
   }
 
+  void setChunkSize(int size) {
+    state = state.copyWith(chunkSize: size);
+  }
+
   Future<void> next() async {
     if (state.tokens.isEmpty) return;
-    state = state.copyWith(index: (state.index + 1).clamp(0, state.tokens.length - 1));
+    state = state.copyWith(index: (state.index + state.chunkSize).clamp(0, state.tokens.length - 1));
     await _persist();
   }
 
   Future<void> previous() async {
     if (state.tokens.isEmpty) return;
-    state = state.copyWith(index: (state.index - 1).clamp(0, state.tokens.length - 1));
+    state = state.copyWith(index: (state.index - state.chunkSize).clamp(0, state.tokens.length - 1));
+    await _persist();
+  }
+
+  Future<void> skipForward() async {
+    if (state.tokens.isEmpty) return;
+    state = state.copyWith(index: (state.index + 50).clamp(0, state.tokens.length - 1));
+    await _persist();
+  }
+
+  Future<void> skipBackward() async {
+    if (state.tokens.isEmpty) return;
+    state = state.copyWith(index: (state.index - 50).clamp(0, state.tokens.length - 1));
     await _persist();
   }
 
@@ -125,9 +163,14 @@ class ReaderController extends Notifier<ReaderState> {
       pause();
       return;
     }
-    state = state.copyWith(index: state.index + 1);
+    
+    final nextIndex = (state.index + state.chunkSize).clamp(0, state.tokens.length - 1);
+    state = state.copyWith(index: nextIndex);
+
     final base = baseDelayForWpm(state.wpm);
-    final delay = adjustDelay(state.current!.word, base);
+    final settings = ref.read(settingsProvider);
+    final delay = adjustDelay(state.current.first.word, base, pauseOnPunctuation: settings.pauseOnPunctuation) * state.chunkSize;
+    
     final now = DateTime.now();
     final ideal = (_nextTickAt ?? now).add(delay);
     final driftAware = ideal.difference(now);

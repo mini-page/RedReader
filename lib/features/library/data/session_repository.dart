@@ -22,4 +22,9 @@ class SessionRepository {
     final items = await all();
     return items.isEmpty ? null : items.first;
   }
+
+  Future<void> clearAll() async {
+    final box = await _box();
+    await box.clear();
+  }
 }
