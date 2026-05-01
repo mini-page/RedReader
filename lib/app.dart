@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/theme/app_theme.dart';
-import 'features/home/presentation/home_screen.dart';
+import 'features/main/presentation/main_scaffold.dart';
 import 'features/reader/presentation/reader_screen.dart';
 import 'features/settings/presentation/settings_controller.dart';
 import 'features/settings/presentation/settings_screen.dart';
@@ -22,11 +22,11 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/onboarding',
           builder: (context, state) => const OnboardingScreen()),
-      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      GoRoute(path: '/', builder: (context, state) => const MainScaffold()),
       GoRoute(
         path: '/preview',
         builder: (context, state) {
-          final extras = state.extra as Map<String, String>?;
+          final extras = state.extra as Map<String, dynamic>?;
           return PreviewScreen(
             initialTitle: extras?['title'] ?? '',
             initialContent: extras?['content'] ?? '',
@@ -52,7 +52,7 @@ class IReaderApp extends ConsumerWidget {
     final router = ref.watch(_routerProvider);
 
     return MaterialApp.router(
-      title: 'iReader',
+      title: 'iReader: READ FAST, THINK DEEP',
       debugShowCheckedModeBanner: false,
       routerConfig: router,
       theme: AppTheme.light,

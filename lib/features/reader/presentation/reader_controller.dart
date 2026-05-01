@@ -1,6 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../library/data/session_repository.dart';
 import '../../settings/presentation/settings_controller.dart';
@@ -8,6 +8,10 @@ import '../../../shared/models/session.dart';
 import '../domain/reader_engine.dart';
 import '../domain/token.dart';
 import '../domain/tokenizer.dart';
+import '../../../core/services/ai_service.dart';
+import '../../stats/data/stats_repository.dart';
+
+enum ReadingMode { rsvp, scroll, audio }
 
 class ReaderState {
   final String sessionId;
@@ -19,6 +23,8 @@ class ReaderState {
   final bool isPlaying;
   final int chunkSize;
   final bool isCompleted;
+  final ReadingMode mode;
+  final bool isLoadingAI;
 
   const ReaderState({
     required this.sessionId,
@@ -30,6 +36,8 @@ class ReaderState {
     required this.isPlaying,
     this.chunkSize = 1,
     this.isCompleted = false,
+    this.mode = ReadingMode.rsvp,
+    this.isLoadingAI = false,
   });
 
   List<Token> get current {
@@ -37,6 +45,12 @@ class ReaderState {
     final end = (index + chunkSize).clamp(0, tokens.length);
     return tokens.sublist(index, end);
   }
+
+  double get progress => tokens.isEmpty ? 0 : (index / tokens.length).clamp(0.0, 1.0);
+
+  // Time calculations based on WPM
+  int get totalDurationSeconds => tokens.isEmpty ? 0 : (tokens.length / (wpm / 60)).round();
+  int get currentDurationSeconds => tokens.isEmpty ? 0 : (index / (wpm / 60)).round();
 
   ReaderState copyWith({
     String? sessionId,
@@ -48,6 +62,8 @@ class ReaderState {
     bool? isPlaying,
     int? chunkSize,
     bool? isCompleted,
+    ReadingMode? mode,
+    bool? isLoadingAI,
   }) =>
       ReaderState(
         sessionId: sessionId ?? this.sessionId,
@@ -59,13 +75,20 @@ class ReaderState {
         isPlaying: isPlaying ?? this.isPlaying,
         chunkSize: chunkSize ?? this.chunkSize,
         isCompleted: isCompleted ?? this.isCompleted,
+        mode: mode ?? this.mode,
+        isLoadingAI: isLoadingAI ?? this.isLoadingAI,
       );
 }
 
 class ReaderController extends Notifier<ReaderState> {
+  final FlutterTts _tts = FlutterTts();
+  DateTime? _sessionStartTime;
+  int _wordsReadInCurrentSession = 0;
+
   @override
   ReaderState build() {
     final settings = ref.watch(settingsProvider);
+    _initTts();
     return ReaderState(
       sessionId: '',
       title: '',
@@ -76,13 +99,22 @@ class ReaderController extends Notifier<ReaderState> {
       isPlaying: false,
       chunkSize: settings.defaultChunkSize,
       isCompleted: false,
+      mode: ReadingMode.rsvp,
+      isLoadingAI: false,
     );
+  }
+
+  void _initTts() {
+    _tts.setCompletionHandler(() {
+      if (state.isPlaying) {
+        _onTtsComplete();
+      }
+    });
   }
 
   SessionRepository get _repo => ref.read(sessionRepositoryProvider);
   Timer? _timer;
   DateTime? _nextTickAt;
-  int _wordsReadInCurrentSession = 0;
 
   Future<void> loadText(String title, String content,
       {int? start, int? wpm}) async {
@@ -116,60 +148,164 @@ class ReaderController extends Notifier<ReaderState> {
     );
   }
 
+  void setMode(ReadingMode mode) {
+    if (state.isPlaying) pause();
+    state = state.copyWith(mode: mode);
+  }
+
   void play() {
     if (state.tokens.isEmpty || state.isCompleted) return;
     _wordsReadInCurrentSession = 0;
+    _sessionStartTime = DateTime.now();
     state = state.copyWith(isPlaying: true);
-    _scheduleNextTick(baseDelayForWpm(state.wpm));
+
+    if (state.mode == ReadingMode.audio) {
+      _startTts();
+    } else {
+      _scheduleNextTick(baseDelayForWpm(state.wpm));
+    }
   }
 
   Future<void> pause() async {
     _timer?.cancel();
+    if (state.mode == ReadingMode.audio) {
+      await _tts.stop();
+    }
+    
+    if (_sessionStartTime != null && _wordsReadInCurrentSession > 0) {
+      final duration = DateTime.now().difference(_sessionStartTime!).inSeconds;
+      if (duration > 0) {
+        await ref.read(statsRepositoryProvider).addSession(
+          _wordsReadInCurrentSession,
+          duration,
+          state.wpm.toDouble(),
+        );
+      }
+    }
+    _sessionStartTime = null;
+
     state = state.copyWith(isPlaying: false);
     await _persist();
   }
 
+  void _startTts() async {
+    if (state.index >= state.tokens.length) return;
+    double rate = (state.wpm / 400).clamp(0.0, 1.0);
+    await _tts.setSpeechRate(rate);
+    _speakNextWord();
+  }
+
+  void _speakNextWord() async {
+    if (!state.isPlaying || state.index >= state.tokens.length) {
+      if (state.index >= state.tokens.length) {
+        state = state.copyWith(isCompleted: true, isPlaying: false);
+      }
+      return;
+    }
+    final word = state.tokens[state.index].word;
+    await _tts.speak(word);
+  }
+
+  void _onTtsComplete() {
+    if (!state.isPlaying) return;
+    final nextIndex = state.index + 1;
+    _wordsReadInCurrentSession++;
+    if (nextIndex >= state.tokens.length) {
+      state = state.copyWith(index: nextIndex, isCompleted: true, isPlaying: false);
+      pause();
+    } else {
+      state = state.copyWith(index: nextIndex);
+      _speakNextWord();
+    }
+  }
+
   void setWpm(double value) {
     state = state.copyWith(wpm: value.round());
+    if (state.isPlaying && state.mode == ReadingMode.audio) {
+      _startTts();
+    }
   }
 
   void setChunkSize(int size) {
     state = state.copyWith(chunkSize: size);
   }
 
+  Future<void> seekTo(double percent) async {
+    final newIndex = (percent * (state.tokens.length - 1)).round().clamp(0, state.tokens.length - 1);
+    state = state.copyWith(index: newIndex, isCompleted: false);
+    if (state.isPlaying && state.mode == ReadingMode.audio) {
+      _startTts();
+    }
+    await _persist();
+  }
+
+  Future<void> jumpToIndex(int i) async {
+    state = state.copyWith(index: i.clamp(0, state.tokens.length - 1), isCompleted: false);
+    if (state.isPlaying && state.mode == ReadingMode.audio) {
+      _startTts();
+    }
+    await _persist();
+  }
+
+  Future<void> skipSeconds(int seconds) async {
+    final wordsToSkip = (seconds * (state.wpm / 60)).round();
+    final newIndex = (state.index + wordsToSkip).clamp(0, state.tokens.length - 1);
+    state = state.copyWith(index: newIndex, isCompleted: false);
+    if (state.isPlaying && state.mode == ReadingMode.audio) _startTts();
+    await _persist();
+  }
+
+  Future<String?> transform(Future<String> Function(AIProvider provider) action) async {
+    final aiService = ref.read(aiServiceProvider);
+    final provider = await aiService.getProvider();
+    if (provider == null) return "AI Provider not available";
+
+    if (state.isPlaying) await pause();
+    state = state.copyWith(isLoadingAI: true);
+
+    try {
+      final transformedText = await action(provider);
+      if (transformedText.isNotEmpty) {
+        final newTokens = tokenizeText(transformedText);
+        state = state.copyWith(
+          content: transformedText,
+          tokens: newTokens,
+          index: 0,
+          isCompleted: false,
+          isLoadingAI: false,
+        );
+        await _persist();
+        return null;
+      } else {
+        state = state.copyWith(isLoadingAI: false);
+        return "Empty response from AI";
+      }
+    } catch (e) {
+      state = state.copyWith(isLoadingAI: false);
+      return e.toString().replaceAll("Exception: ", "");
+    }
+  }
+
   Future<void> next() async {
     if (state.tokens.isEmpty) return;
     state = state.copyWith(
-        index:
-            (state.index + state.chunkSize).clamp(0, state.tokens.length - 1),
+        index: (state.index + state.chunkSize).clamp(0, state.tokens.length - 1),
         isCompleted: false);
+    if (state.isPlaying && state.mode == ReadingMode.audio) _startTts();
     await _persist();
   }
 
   Future<void> previous() async {
     if (state.tokens.isEmpty) return;
     state = state.copyWith(
-        index:
-            (state.index - state.chunkSize).clamp(0, state.tokens.length - 1),
+        index: (state.index - state.chunkSize).clamp(0, state.tokens.length - 1),
         isCompleted: false);
+    if (state.isPlaying && state.mode == ReadingMode.audio) _startTts();
     await _persist();
   }
 
-  Future<void> skipForward() async {
-    if (state.tokens.isEmpty) return;
-    state = state.copyWith(
-        index: (state.index + 50).clamp(0, state.tokens.length - 1),
-        isCompleted: false);
-    await _persist();
-  }
-
-  Future<void> skipBackward() async {
-    if (state.tokens.isEmpty) return;
-    state = state.copyWith(
-        index: (state.index - 50).clamp(0, state.tokens.length - 1),
-        isCompleted: false);
-    await _persist();
-  }
+  Future<void> skipForward() async => skipSeconds(10);
+  Future<void> skipBackward() async => skipSeconds(-10);
 
   void _scheduleNextTick(Duration fromNow) {
     _timer?.cancel();
@@ -185,24 +321,19 @@ class ReaderController extends Notifier<ReaderState> {
       return;
     }
 
-    final nextIndex =
-        (state.index + state.chunkSize).clamp(0, state.tokens.length - 1);
+    final nextIndex = (state.index + state.chunkSize).clamp(0, state.tokens.length - 1);
     state = state.copyWith(index: nextIndex);
     _wordsReadInCurrentSession += state.chunkSize;
 
     final base = baseDelayForWpm(state.wpm);
     final settings = ref.read(settingsProvider);
 
-    // Adjust delay based on word length and punctuation
-    Duration delay = adjustDelay(state.current.first.word, base,
+    Duration delay = adjustDelay(state.tokens[state.index].word, base,
             pauseOnPunctuation: settings.pauseOnPunctuation) *
         state.chunkSize;
 
-    // Warm-up mode: Ramps up speed over the first 25 words
     if (_wordsReadInCurrentSession < 25) {
-      final factor = 1.0 +
-          ((25 - _wordsReadInCurrentSession) *
-              0.04); // Start 2x slower, ramp up to 1x
+      final factor = 1.0 + ((25 - _wordsReadInCurrentSession) * 0.04);
       delay = Duration(milliseconds: (delay.inMilliseconds * factor).round());
     }
 
@@ -225,7 +356,5 @@ class ReaderController extends Notifier<ReaderState> {
   }
 }
 
-final sessionRepositoryProvider =
-    Provider<SessionRepository>((ref) => SessionRepository());
-final readerProvider =
-    NotifierProvider<ReaderController, ReaderState>(ReaderController.new);
+final sessionRepositoryProvider = Provider<SessionRepository>((ref) => SessionRepository());
+final readerProvider = NotifierProvider<ReaderController, ReaderState>(ReaderController.new);

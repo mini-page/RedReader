@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../../core/services/secure_storage_service.dart';
 import '../../../shared/models/app_settings.dart';
 import '../../reader/presentation/reader_controller.dart';
 import 'settings_controller.dart';
@@ -33,6 +35,32 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _aboutTapCount = 0;
+  final TextEditingController _geminiKeyController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKeys();
+  }
+
+  Future<void> _loadKeys() async {
+    final storage = ref.read(secureStorageProvider);
+    final key = await storage.getGeminiKey();
+    if (key != null) {
+      setState(() {
+        _geminiKeyController.text = key;
+      });
+    }
+  }
+
+  Future<void> _saveKey(String key) async {
+    final storage = ref.read(secureStorageProvider);
+    await storage.saveGeminiKey(key);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gemini API Key saved securely.')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,14 +77,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: _buildCircleButton(
-              context, Icons.arrow_back_rounded, () => context.pop(), isDark),
-        ),
         title: Text(
           'Settings',
-          style: TextStyle(
+          style: GoogleFonts.lexend(
               color: onSurface, fontWeight: FontWeight.bold, fontSize: 20),
         ),
         centerTitle: true,
@@ -109,6 +132,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   controller.update(settings.copyWith(pauseOnPunctuation: v)),
               isDark: isDark,
             ),
+          ], isDark),
+          const SizedBox(height: 32),
+          _buildSectionHeader('AI INTELLIGENCE', sectionTitleColor),
+          _buildSettingsCard([
+            _buildAiConfig(onSurface, isDark),
           ], isDark),
           const SizedBox(height: 32),
           _buildSectionHeader('APPEARANCE', sectionTitleColor),
@@ -204,6 +232,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiConfig(Color onSurface, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.sparkles, color: Color(0xFFFF3B3B), size: 18),
+              const SizedBox(width: 8),
+              Text('Gemini API Key',
+                  style: TextStyle(
+                      color: onSurface,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Required for summary & simplification',
+              style: TextStyle(
+                  color: onSurface.withValues(alpha: 0.4), fontSize: 13)),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: TextField(
+              controller: _geminiKeyController,
+              obscureText: true,
+              style: TextStyle(color: onSurface, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Enter your API key...',
+                hintStyle: TextStyle(color: onSurface.withValues(alpha: 0.3)),
+                border: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.save_rounded, color: Color(0xFFFF3B3B)),
+                  onPressed: () => _saveKey(_geminiKeyController.text.trim()),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

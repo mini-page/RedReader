@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
-import '../../../shared/models/app_settings.dart';
-import '../../settings/presentation/settings_controller.dart';
-import '../../settings/presentation/settings_screen.dart';
-import 'reader_controller.dart';
+import 'package:red_reader/shared/models/app_settings.dart';
+import 'package:red_reader/features/settings/presentation/settings_controller.dart';
+import 'package:red_reader/features/settings/presentation/settings_screen.dart';
+import 'package:red_reader/features/reader/presentation/reader_controller.dart';
+import 'package:red_reader/core/services/ai_service.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
   const ReaderScreen({super.key});
@@ -17,6 +20,8 @@ class ReaderScreen extends ConsumerStatefulWidget {
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   bool _showSettingsPopup = false;
+  final ScrollController _scrollController = ScrollController();
+  final double _itemHeight = 80.0;
 
   void _toggleSettings() {
     setState(() {
@@ -25,10 +30,37 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _runTransform(Future<String> Function(AIProvider p) action) async {
+    final controller = ref.read(readerProvider.notifier);
+    final error = await controller.transform(action);
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: const Color(0xFFFF3B3B),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     ref.listen<ReaderState>(readerProvider, (previous, next) {
       if (previous?.isCompleted != true && next.isCompleted) {
         _showCompletionDialog(next);
+      }
+      if (next.index != previous?.index) {
+        if (next.mode == ReadingMode.scroll) {
+          _scrollToCurrent(next.index);
+        } else if (next.mode == ReadingMode.rsvp || next.mode == ReadingMode.audio) {
+          _scrollToContextWord(next.index);
+        }
       }
     });
 
@@ -42,56 +74,347 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Main Reader View / Interaction Layer
-            GestureDetector(
-              onTap: () {
-                if (isPlaying) {
-                  controller.pause();
-                } else {
-                  if (_showSettingsPopup) {
-                    setState(() => _showSettingsPopup = false);
-                  } else {
-                    controller.play();
-                  }
-                }
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Column(
-                children: [
-                  // Top Bar - Hidden when playing
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 300),
-                    opacity: isPlaying ? 0.0 : 1.0,
-                    child: IgnorePointer(
-                      ignoring: isPlaying,
-                      child: _buildAppBar(context, state),
+            Column(
+              children: [
+                // Top Bar
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 300),
+                  opacity: (isPlaying && state.mode == ReadingMode.rsvp) ? 0.0 : 1.0,
+                  child: IgnorePointer(
+                    ignoring: (isPlaying && state.mode == ReadingMode.rsvp),
+                    child: _buildAppBar(context, state),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (isPlaying) {
+                        controller.pause();
+                      } else {
+                        if (_showSettingsPopup) {
+                          setState(() => _showSettingsPopup = false);
+                        } else {
+                          controller.play();
+                        }
+                      }
+                    },
+                    behavior: HitTestBehavior.opaque,
+                    child: _buildMainView(state, settings),
+                  ),
+                ),
+                // Bottom Controls
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 300),
+                  opacity: (isPlaying && state.mode == ReadingMode.rsvp) ? 0.0 : 1.0,
+                  child: IgnorePointer(
+                    ignoring: (isPlaying && state.mode == ReadingMode.rsvp),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildModeSelector(state, controller),
+                        const SizedBox(height: 16),
+                        _buildBottomControls(state, controller),
+                      ],
                     ),
                   ),
-                  const Spacer(),
-                  // The Reading View
-                  _buildReaderView(state, settings.fontSize,
-                      Color(settings.orpColorValue), settings.fontFamily),
-                  const Spacer(),
-                  // Bottom Controls - Hidden when playing
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 300),
-                    opacity: isPlaying ? 0.0 : 1.0,
-                    child: IgnorePointer(
-                      ignoring: isPlaying,
-                      child: _buildBottomControls(state, controller),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
 
-            // Settings Popup Overlay
             if (_showSettingsPopup && !isPlaying)
               Positioned(
                 top: 70,
                 right: 16,
                 child: _buildQuickSettingsPopup(context, ref),
               ),
+
+            if (state.isLoadingAI)
+              Container(
+                color: Colors.black.withValues(alpha: 0.8),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                        color: Color(0xFFFF3B3B),
+                        strokeWidth: 4,
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'AI IS THINKING...',
+                        style: GoogleFonts.lexend(
+                          color: const Color(0xFFFF3B3B),
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Transforming your reading experience',
+                        style: TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _scrollToContextWord(int index) {
+    if (!_scrollController.hasClients) return;
+    
+    final viewportHeight = _scrollController.position.viewportDimension;
+    const wordsPerLine = 6;
+    final line = (index / wordsPerLine).floor();
+    const lineHeight = 44.0; 
+    
+    final offset = (line * lineHeight) - (viewportHeight / 2) + (lineHeight / 2);
+    
+    _scrollController.animateTo(
+      offset.clamp(0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  List<List<T>> _chunkList<T>(List<T> list, int size) {
+    List<List<T>> chunks = [];
+    for (var i = 0; i < list.length; i += size) {
+      chunks.add(list.sublist(i, (i + size).clamp(0, list.length)));
+    }
+    return chunks;
+  }
+
+  void _scrollToCurrent(int index) {
+    if (!_scrollController.hasClients) return;
+    final viewportHeight = _scrollController.position.viewportDimension;
+    final offset = (index * _itemHeight) - (viewportHeight / 2) + (_itemHeight / 2);
+    _scrollController.animateTo(
+      offset.clamp(0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  Widget _buildMainView(ReaderState state, AppSettings settings) {
+    switch (state.mode) {
+      case ReadingMode.rsvp:
+      case ReadingMode.audio:
+        return _buildRsvpView(state, settings.fontSize,
+            Color(settings.orpColorValue), settings.fontFamily);
+      case ReadingMode.scroll:
+        return _buildScrollView(state, settings);
+    }
+  }
+
+  Widget _buildRsvpView(
+      ReaderState state, double fontSize, Color orpColor, String fontFamily) {
+    final currentTokens = state.current;
+    if (currentTokens.isEmpty) return const SizedBox.shrink();
+
+    const wordsPerLine = 6;
+    final contextLines = _chunkList(state.tokens, wordsPerLine);
+
+    return Column(
+      children: [
+        // 1. Top Context View (Line-based ListView for perfect centering)
+        Expanded(
+          flex: 5,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return ListView.builder(
+                controller: _scrollController,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: contextLines.length,
+                itemExtent: 44.0,
+                padding: EdgeInsets.symmetric(vertical: constraints.maxHeight / 2 - 22),
+                itemBuilder: (context, lineIdx) {
+                  final lineTokens = contextLines[lineIdx];
+                  return Center(
+                    child: Wrap(
+                      spacing: 4,
+                      alignment: WrapAlignment.center,
+                      children: lineTokens.asMap().entries.map((entry) {
+                        final tokenIdxInLine = entry.key;
+                        final token = entry.value;
+                        final absoluteIdx = (lineIdx * wordsPerLine) + tokenIdxInLine;
+                        final isCurrent = absoluteIdx == state.index;
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isCurrent ? Colors.white.withValues(alpha: 0.15) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            token.word,
+                            style: GoogleFonts.getFont(
+                              fontFamily,
+                              fontSize: 16,
+                              color: isCurrent ? Colors.white : Colors.white.withValues(alpha: 0.3),
+                              fontWeight: isCurrent ? FontWeight.bold : FontWeight.w400,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  );
+                },
+              );
+            }
+          ),
+        ),
+
+        // Divider/Space
+        const SizedBox(height: 40),
+
+        // 2. Central Focal RSVP Area
+        Expanded(
+          flex: 4,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                    height: 2,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF3B3B).withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(1),
+                    )),
+                const SizedBox(height: 32),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: currentTokens
+                      .map((token) => _WordView(
+                            word: token.word,
+                            orpIndex: token.orpIndex,
+                            fontSize: fontSize,
+                            orpColor: orpColor,
+                            fontFamily: fontFamily,
+                            baseColor: Colors.white,
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 32),
+                Container(
+                    height: 2,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF3B3B).withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(1),
+                    )),
+                
+                if (state.mode == ReadingMode.audio) ...[
+                  const SizedBox(height: 40),
+                  const Icon(LucideIcons.volume2, color: Color(0xFFFF3B3B), size: 32),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScrollView(ReaderState state, AppSettings settings) {
+    final viewportHeight = MediaQuery.of(context).size.height;
+    return Stack(
+      children: [
+        // Center Focus Background Highlight
+        Center(
+          child: Container(
+            height: _itemHeight,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+        ),
+        ListView.builder(
+          controller: _scrollController,
+          physics: const NeverScrollableScrollPhysics(), // Scroll managed by controller index
+          itemCount: state.tokens.length,
+          itemExtent: _itemHeight,
+          padding: EdgeInsets.symmetric(
+              vertical: (viewportHeight / 2) - (_itemHeight / 2)),
+          itemBuilder: (context, index) {
+            final isCurrent = index == state.index;
+            final token = state.tokens[index];
+            
+            // Calculate distance from center to fade out words
+            final distance = (index - state.index).abs();
+            final opacity = isCurrent ? 1.0 : (0.2 / (distance + 1)).clamp(0.02, 0.2);
+            final scale = isCurrent ? 1.0 : (1.0 - (distance * 0.05)).clamp(0.7, 1.0);
+
+            return Center(
+              child: Transform.scale(
+                scale: scale,
+                child: Opacity(
+                  opacity: opacity,
+                  child: _WordView(
+                    word: token.word,
+                    orpIndex: token.orpIndex,
+                    fontSize: settings.fontSize,
+                    orpColor: isCurrent ? Color(settings.orpColorValue) : Colors.transparent,
+                    fontFamily: settings.fontFamily,
+                    baseColor: Colors.white,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        // Visual Focus Brackets (Red)
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(height: 2, width: 40, decoration: BoxDecoration(color: const Color(0xFFFF3B3B), borderRadius: BorderRadius.circular(1))),
+              SizedBox(height: _itemHeight),
+              Container(height: 2, width: 40, decoration: BoxDecoration(color: const Color(0xFFFF3B3B), borderRadius: BorderRadius.circular(1))),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModeSelector(ReaderState state, ReaderController controller) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ModeButton(
+              icon: LucideIcons.zap,
+              label: 'RSVP',
+              isSelected: state.mode == ReadingMode.rsvp,
+              onTap: () => controller.setMode(ReadingMode.rsvp),
+            ),
+            _ModeButton(
+              icon: LucideIcons.alignLeft,
+              label: 'Scroll',
+              isSelected: state.mode == ReadingMode.scroll,
+              onTap: () => controller.setMode(ReadingMode.scroll),
+            ),
+            _ModeButton(
+              icon: LucideIcons.headphones,
+              label: 'Audio',
+              isSelected: state.mode == ReadingMode.audio,
+              onTap: () => controller.setMode(ReadingMode.audio),
+            ),
           ],
         ),
       ),
@@ -153,9 +476,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Widget _buildAppBar(BuildContext context, ReaderState state) {
-    final progressPercent = state.tokens.isEmpty
-        ? 0
-        : (state.index / state.tokens.length * 100).toInt();
+    final progressPercent = (state.progress * 100).toInt();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -187,7 +508,111 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ),
           _buildCircleButton(Icons.tune_rounded, _toggleSettings,
               isSelected: _showSettingsPopup),
+          const SizedBox(width: 8),
+          _buildCircleButton(LucideIcons.sparkles, () => _showAiMenu(context, ref)),
         ],
+      ),
+    );
+  }
+
+  void _showAiMenu(BuildContext context, WidgetRef ref) async {
+    final aiService = ref.read(aiServiceProvider);
+    final provider = await aiService.getProvider();
+    final state = ref.read(readerProvider);
+
+    if (!context.mounted) return;
+
+    if (provider == null) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('AI Not Configured'),
+          content: const Text('Please add your Gemini API Key in Settings to use AI features.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 24),
+            const Text('AI TRANSFORMATIONS', style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+            const SizedBox(height: 16),
+            _AiActionTile(
+              icon: LucideIcons.fileText,
+              title: 'Summarize',
+              subtitle: 'Condense into key points',
+              onTap: () {
+                Navigator.pop(context);
+                _runTransform((p) => p.summarize(state.content));
+              },
+            ),
+            _AiActionTile(
+              icon: LucideIcons.wand2,
+              title: 'Simplify',
+              subtitle: 'Make it easier to understand',
+              onTap: () {
+                Navigator.pop(context);
+                _runTransform((p) => p.simplify(state.content));
+              },
+            ),
+            _AiActionTile(
+              icon: LucideIcons.languages,
+              title: 'Translate',
+              subtitle: 'Translate to another language',
+              onTap: () {
+                Navigator.pop(context);
+                _showLanguagePicker(context, state);
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLanguagePicker(BuildContext context, ReaderState state) {
+    final languages = ['Spanish', 'French', 'German', 'Chinese', 'Japanese', 'Hindi'];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: languages.length,
+          itemBuilder: (context, i) => ListTile(
+            title: Text(languages[i], style: const TextStyle(color: Colors.white)),
+            onTap: () {
+              Navigator.pop(context);
+              _runTransform((p) => p.translate(state.content, languages[i]));
+            },
+          ),
+        ),
       ),
     );
   }
@@ -207,47 +632,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  Widget _buildReaderView(
-      ReaderState state, double fontSize, Color orpColor, String fontFamily) {
-    final currentTokens = state.current;
-    if (currentTokens.isEmpty) return const SizedBox.shrink();
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-              height: 12, width: 2, color: Colors.white.withValues(alpha: 0.2)),
-          const SizedBox(height: 24),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
-            children: currentTokens
-                .map((token) => _WordView(
-                      word: token.word,
-                      orpIndex: token.orpIndex,
-                      fontSize: fontSize,
-                      orpColor: orpColor,
-                      fontFamily: fontFamily,
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: 24),
-          Container(
-              height: 12, width: 2, color: Colors.white.withValues(alpha: 0.2)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildBottomControls(ReaderState state, ReaderController controller) {
-    final progress = state.tokens.isEmpty
-        ? 0.0
-        : (state.index / state.tokens.length).clamp(0.0, 1.0);
-
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      padding: const EdgeInsets.only(left: 24, right: 24, bottom: 40, top: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -305,7 +692,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
             alignment: Alignment.centerLeft,
             child: FractionallySizedBox(
-              widthFactor: progress,
+              widthFactor: state.progress,
               child: Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFFFF3B3B),
@@ -642,19 +1029,85 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 }
 
+class _AiActionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _AiActionTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: const Color(0xFFFF3B3B), size: 20),
+      ),
+      title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+      trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ModeButton({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF3B3B) : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? Colors.white : Colors.white60, size: 18),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _WordView extends StatelessWidget {
   final String word;
   final int orpIndex;
   final double fontSize;
   final Color orpColor;
   final String fontFamily;
+  final Color baseColor;
 
   const _WordView(
       {required this.word,
       required this.orpIndex,
       required this.fontSize,
       required this.orpColor,
-      required this.fontFamily});
+      required this.fontFamily,
+      required this.baseColor});
 
   @override
   Widget build(BuildContext context) {
@@ -662,6 +1115,7 @@ class _WordView extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(word.length, (i) {
+        final isOrp = i == orpIndex;
         return Text(
           word[i],
           style: GoogleFonts.getFont(
@@ -669,7 +1123,7 @@ class _WordView extends StatelessWidget {
             fontSize: fontSize,
             height: 1.1,
             fontWeight: FontWeight.w600,
-            color: i == orpIndex ? orpColor : Colors.white,
+            color: isOrp && orpColor != Colors.transparent ? orpColor : baseColor,
           ),
         );
       }),
