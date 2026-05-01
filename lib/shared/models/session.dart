@@ -6,9 +6,22 @@ class Session {
   final int wpm;
   final DateTime updatedAt;
 
-  const Session({required this.id, required this.title, required this.content, required this.position, required this.wpm, required this.updatedAt});
+  const Session(
+      {required this.id,
+      required this.title,
+      required this.content,
+      required this.position,
+      required this.wpm,
+      required this.updatedAt});
 
-  Session copyWith({String? id, String? title, String? content, int? position, int? wpm, DateTime? updatedAt}) => Session(
+  Session copyWith(
+          {String? id,
+          String? title,
+          String? content,
+          int? position,
+          int? wpm,
+          DateTime? updatedAt}) =>
+      Session(
         id: id ?? this.id,
         title: title ?? this.title,
         content: content ?? this.content,

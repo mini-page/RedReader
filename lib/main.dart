@@ -7,5 +7,5 @@ import 'app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
-  runApp(const ProviderScope(child: RedReaderApp()));
+  runApp(const ProviderScope(child: IReaderApp()));
 }

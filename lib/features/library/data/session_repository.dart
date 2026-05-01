@@ -5,7 +5,8 @@ import '../../../shared/models/session.dart';
 class SessionRepository {
   static const boxName = 'sessions';
 
-  Future<Box> _box() async => Hive.isBoxOpen(boxName) ? Hive.box(boxName) : await Hive.openBox(boxName);
+  Future<Box> _box() async =>
+      Hive.isBoxOpen(boxName) ? Hive.box(boxName) : await Hive.openBox(boxName);
 
   Future<void> save(Session session) async {
     final box = await _box();
@@ -14,7 +15,9 @@ class SessionRepository {
 
   Future<List<Session>> all() async {
     final box = await _box();
-    return box.values.map((e) => Session.fromJson(Map<dynamic, dynamic>.from(e as Map))).toList()
+    return box.values
+        .map((e) => Session.fromJson(Map<dynamic, dynamic>.from(e as Map)))
+        .toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   }
 

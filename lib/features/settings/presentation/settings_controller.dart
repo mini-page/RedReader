@@ -15,14 +15,19 @@ class SettingsController extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     state = state.copyWith(
       defaultWpm: prefs.getInt('defaultWpm') ?? state.defaultWpm,
-      defaultChunkSize: prefs.getInt('defaultChunkSize') ?? state.defaultChunkSize,
+      defaultChunkSize:
+          prefs.getInt('defaultChunkSize') ?? state.defaultChunkSize,
       fontSize: prefs.getDouble('fontSize') ?? state.fontSize,
-      pauseOnPunctuation: prefs.getBool('pauseOnPunctuation') ?? state.pauseOnPunctuation,
+      pauseOnPunctuation:
+          prefs.getBool('pauseOnPunctuation') ?? state.pauseOnPunctuation,
       orpColorValue: prefs.getInt('orpColorValue') ?? state.orpColorValue,
-      themeMode: ThemeMode.values[prefs.getInt('themeMode') ?? state.themeMode.index],
+      themeMode:
+          ThemeMode.values[prefs.getInt('themeMode') ?? state.themeMode.index],
       showOledBlack: prefs.getBool('showOledBlack') ?? state.showOledBlack,
       fontFamily: prefs.getString('fontFamily') ?? state.fontFamily,
-      hasCompletedOnboarding: prefs.getBool('hasCompletedOnboarding') ?? state.hasCompletedOnboarding,
+      hasCompletedOnboarding: prefs.getBool('hasCompletedOnboarding') ??
+          state.hasCompletedOnboarding,
+      hasRunDemo: prefs.getBool('hasRunDemo') ?? state.hasRunDemo,
     );
   }
 
@@ -38,11 +43,17 @@ class SettingsController extends Notifier<AppSettings> {
     await prefs.setBool('showOledBlack', next.showOledBlack);
     await prefs.setString('fontFamily', next.fontFamily);
     await prefs.setBool('hasCompletedOnboarding', next.hasCompletedOnboarding);
+    await prefs.setBool('hasRunDemo', next.hasRunDemo);
   }
 
   Future<void> completeOnboarding() async {
     await update(state.copyWith(hasCompletedOnboarding: true));
   }
+
+  Future<void> completeDemo() async {
+    await update(state.copyWith(hasRunDemo: true));
+  }
 }
 
-final settingsProvider = NotifierProvider<SettingsController, AppSettings>(SettingsController.new);
+final settingsProvider =
+    NotifierProvider<SettingsController, AppSettings>(SettingsController.new);

@@ -11,8 +11,15 @@ int getORPIndex(String word) {
   return 4;
 }
 
-Duration adjustDelay(String word, Duration base, {bool pauseOnPunctuation = true}) {
-  if (pauseOnPunctuation && (word.endsWith('.') || word.endsWith(',') || word.endsWith(';') || word.endsWith(':') || word.endsWith('!') || word.endsWith('?'))) {
+Duration adjustDelay(String word, Duration base,
+    {bool pauseOnPunctuation = true}) {
+  if (pauseOnPunctuation &&
+      (word.endsWith('.') ||
+          word.endsWith(',') ||
+          word.endsWith(';') ||
+          word.endsWith(':') ||
+          word.endsWith('!') ||
+          word.endsWith('?'))) {
     return Duration(milliseconds: (base.inMilliseconds * 2.0).round());
   }
   if (word.length > 10) {

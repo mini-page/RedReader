@@ -10,6 +10,7 @@ class AppSettings {
   final bool showOledBlack;
   final String fontFamily;
   final bool hasCompletedOnboarding;
+  final bool hasRunDemo;
 
   const AppSettings({
     this.defaultWpm = 300,
@@ -21,6 +22,7 @@ class AppSettings {
     this.showOledBlack = true,
     this.fontFamily = 'Inter',
     this.hasCompletedOnboarding = false,
+    this.hasRunDemo = false,
   });
 
   AppSettings copyWith({
@@ -33,6 +35,7 @@ class AppSettings {
     bool? showOledBlack,
     String? fontFamily,
     bool? hasCompletedOnboarding,
+    bool? hasRunDemo,
   }) =>
       AppSettings(
         defaultWpm: defaultWpm ?? this.defaultWpm,
@@ -43,6 +46,8 @@ class AppSettings {
         themeMode: themeMode ?? this.themeMode,
         showOledBlack: showOledBlack ?? this.showOledBlack,
         fontFamily: fontFamily ?? this.fontFamily,
-        hasCompletedOnboarding: hasCompletedOnboarding ?? this.hasCompletedOnboarding,
+        hasCompletedOnboarding:
+            hasCompletedOnboarding ?? this.hasCompletedOnboarding,
+        hasRunDemo: hasRunDemo ?? this.hasRunDemo,
       );
 }

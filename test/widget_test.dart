@@ -12,8 +12,8 @@ void main() {
   });
 
   testWidgets('smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: RedReaderApp()));
+    await tester.pumpWidget(const ProviderScope(child: IReaderApp()));
     await tester.pump(); // allow Hive to settle if needed
-    expect(find.text('REDEYE'), findsOneWidget);
+    expect(find.text('iReader'), findsOneWidget);
   });
 }

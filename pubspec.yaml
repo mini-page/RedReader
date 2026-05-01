@@ -1,5 +1,5 @@
 name: red_reader
-description: Red Reader- Flash Fast Reading
+description: iReader - Flash Fast Reading
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -40,3 +40,11 @@ flutter:
     - assets/images/
     - assets/images/app_icon.png
     - assets/images/shalu.jpg
+    - assets/images/galley/Lovey_0.jpg
+    - assets/images/galley/Lovey_1.jpg
+    - assets/images/galley/Lovey_2.jpg
+    - assets/images/galley/Lovey_3.jpg
+    - assets/images/galley/Lovey_4.jpg
+    - assets/images/galley/Lovey_5.jpg
+    - assets/images/galley/Lovey_6.jpg
+    - assets/images/galley/Lovey_7.jpg

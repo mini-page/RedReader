@@ -18,17 +18,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     OnboardingData(
       title: 'Read at the\nspeed of\nthought.',
       subtitle: '01 — CONCEPT',
-      description: 'RedReader flashes one word at a time, exactly where your eyes already focus. No scrolling. No saccades.',
+      description:
+          'iReader flashes one word at a time, exactly where your eyes already focus. No scrolling. No saccades.',
     ),
     OnboardingData(
       title: 'Lock onto\nthe focal point.',
       subtitle: '02 — THE RED LETTER',
-      description: 'Each word is anchored by a single red letter — the Optimal Recognition Point. Keep your eyes still. Let the words come to you.',
+      description:
+          'Each word is anchored by a single red letter — the Optimal Recognition Point. Keep your eyes still. Let the words come to you.',
     ),
     OnboardingData(
       title: 'Your pace.\nYour\nthroughput.',
       subtitle: '03 — CONTROL',
-      description: 'Drag to set WPM. Pause anytime. Rewind if you blinked. From 200 to 1000+ words per minute.',
+      description:
+          'Drag to set WPM. Pause anytime. Rewind if you blinked. From 200 to 1000+ words per minute.',
     ),
   ];
 
@@ -39,28 +42,28 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = ref.watch(settingsProvider);
+    final isDark = settings.themeMode == ThemeMode.dark;
+    final onSurface = isDark ? Colors.white : Colors.black;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: isDark
+          ? (settings.showOledBlack ? Colors.black : const Color(0xFF121212))
+          : const Color(0xFFF6F6F6),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Row(
-                children: [
-                  Image.asset('assets/images/app_icon.png', width: 24, height: 24),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'RedReader',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Image.asset(
+                    isDark
+                        ? 'assets/images/transparent_white_icon.png'
+                        : 'assets/images/transparent_black_icon.png',
+                    width: 24,
+                    height: 24),
               ),
             ),
             Expanded(
@@ -68,17 +71,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 controller: _pageController,
                 itemCount: _pages.length,
                 onPageChanged: (idx) => setState(() => _currentPage = idx),
-                itemBuilder: (context, idx) => _buildPage(_pages[idx]),
+                itemBuilder: (context, idx) =>
+                    _buildPage(_pages[idx], onSurface),
               ),
             ),
-            _buildFooter(),
+            _buildFooter(onSurface),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPage(OnboardingData data) {
+  Widget _buildPage(OnboardingData data, Color onSurface) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -87,7 +91,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Text(
             data.subtitle,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.3),
+              color: onSurface.withValues(alpha: 0.3),
               fontSize: 12,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.5,
@@ -96,8 +100,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 16),
           Text(
             data.title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: onSurface,
               fontSize: 48,
               fontWeight: FontWeight.w900,
               height: 1.1,
@@ -107,7 +111,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Text(
             data.description,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
+              color: onSurface.withValues(alpha: 0.6),
               fontSize: 18,
               height: 1.5,
             ),
@@ -117,7 +121,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  Widget _buildFooter() {
+  Widget _buildFooter(Color onSurface) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Row(
@@ -135,7 +139,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     height: 4,
                     width: index == _currentPage ? 24 : 8,
                     decoration: BoxDecoration(
-                      color: index == _currentPage ? const Color(0xFFFF3B3B) : Colors.white.withOpacity(0.2),
+                      color: index == _currentPage
+                          ? const Color(0xFFFF3B3B)
+                          : onSurface.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   );
@@ -146,7 +152,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 onPressed: _onFinish,
                 child: Text(
                   'Skip',
-                  style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 16),
+                  style: TextStyle(
+                      color: onSurface.withValues(alpha: 0.4), fontSize: 16),
                 ),
               ),
             ],
@@ -155,7 +162,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           GestureDetector(
             onTap: () {
               if (_currentPage < _pages.length - 1) {
-                _pageController.nextPage(duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
+                _pageController.nextPage(
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeInOut);
               } else {
                 _onFinish();
               }
@@ -168,7 +177,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
               child: Text(
                 _currentPage == _pages.length - 1 ? 'Get Started' : 'Next',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -182,5 +194,6 @@ class OnboardingData {
   final String title;
   final String subtitle;
   final String description;
-  OnboardingData({required this.title, required this.subtitle, required this.description});
+  OnboardingData(
+      {required this.title, required this.subtitle, required this.description});
 }
