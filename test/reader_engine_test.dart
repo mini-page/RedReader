@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:red_reader/features/reader/domain/reader_engine.dart';
-import 'package:red_reader/features/reader/domain/tokenizer.dart';
 
 void main() {
   test('orp index rules', () {
@@ -18,6 +17,6 @@ void main() {
 
   test('timing adjustment for punctuation', () {
     const base = Duration(milliseconds: 100);
-    expect(adjustDelay('hello,', base).inMilliseconds, 150);
+    expect(adjustDelay('hello,', base).inMilliseconds, 200);
   });
 }

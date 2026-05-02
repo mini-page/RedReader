@@ -12,6 +12,8 @@ import 'features/splash/presentation/splash_screen.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 
 import 'features/home/presentation/preview_screen.dart';
+import 'features/bookmarks/presentation/bookmark_session_screen.dart';
+import 'features/home/presentation/rss_feed_screen.dart';
 
 final _routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -39,6 +41,22 @@ final _routerProvider = Provider<GoRouter>((ref) {
           path: '/settings', builder: (context, state) => const SettingsScreen()),
       GoRoute(
           path: '/love-gallery', builder: (context, state) => const LoveGalleryScreen()),
+      GoRoute(
+        path: '/bookmarks/:sessionId',
+        builder: (context, state) => BookmarkSessionScreen(
+          sessionId: state.pathParameters['sessionId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/rss',
+        builder: (context, state) {
+          final extras = state.extra as Map<String, dynamic>?;
+          return RssFeedScreen(
+            feedUrl: extras?['url'] ?? 'https://hnrss.org/frontpage',
+            feedName: extras?['name'] ?? 'News Feed',
+          );
+        },
+      ),
     ],
   );
 });

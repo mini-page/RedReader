@@ -1,23 +1,27 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:uuid/uuid.dart';
 
-import '../../library/data/session_repository.dart';
-import '../../settings/presentation/settings_controller.dart';
-import '../../../shared/models/session.dart';
-import '../domain/reader_engine.dart';
-import '../domain/token.dart';
-import '../domain/tokenizer.dart';
-import '../../../core/services/ai_service.dart';
-import '../../stats/data/stats_repository.dart';
+import 'package:red_reader/features/library/data/session_repository.dart';
+import 'package:red_reader/features/settings/presentation/settings_controller.dart';
+import 'package:red_reader/shared/models/session.dart';
+import 'package:red_reader/features/reader/domain/reader_engine.dart';
+import 'package:red_reader/core/services/ai_service.dart';
+import 'package:red_reader/features/stats/data/stats_repository.dart';
+import 'package:red_reader/features/bookmarks/presentation/bookmarks_provider.dart';
+import 'package:red_reader/features/bookmarks/data/bookmark_repository.dart';
+import 'package:red_reader/features/bookmarks/domain/bookmark.dart';
 
-enum ReadingMode { rsvp, scroll, audio }
+enum ReadingMode { rsvp, scroll }
 
 class ReaderState {
   final String sessionId;
   final String title;
   final String content;
   final List<Token> tokens;
+  final List<Paragraph> paragraphs;
   final int index;
   final int wpm;
   final bool isPlaying;
@@ -25,12 +29,17 @@ class ReaderState {
   final bool isCompleted;
   final ReadingMode mode;
   final bool isLoadingAI;
+  final bool showContext;
+  final bool isAudioEnabled;
+  final Set<int> bookmarks;
+  final bool isReviewMode;
 
   const ReaderState({
     required this.sessionId,
     required this.title,
     required this.content,
     required this.tokens,
+    required this.paragraphs,
     required this.index,
     required this.wpm,
     required this.isPlaying,
@@ -38,7 +47,21 @@ class ReaderState {
     this.isCompleted = false,
     this.mode = ReadingMode.rsvp,
     this.isLoadingAI = false,
+    this.showContext = true,
+    this.isAudioEnabled = false,
+    this.bookmarks = const {},
+    this.isReviewMode = false,
   });
+
+  int get currentParagraphIndex {
+    for (int i = 0; i < paragraphs.length; i++) {
+      final p = paragraphs[i];
+      if (index >= p.globalStartIndex && index < p.globalStartIndex + p.tokens.length) {
+        return i;
+      }
+    }
+    return 0;
+  }
 
   List<Token> get current {
     if (tokens.isEmpty) return [];
@@ -48,15 +71,12 @@ class ReaderState {
 
   double get progress => tokens.isEmpty ? 0 : (index / tokens.length).clamp(0.0, 1.0);
 
-  // Time calculations based on WPM
-  int get totalDurationSeconds => tokens.isEmpty ? 0 : (tokens.length / (wpm / 60)).round();
-  int get currentDurationSeconds => tokens.isEmpty ? 0 : (index / (wpm / 60)).round();
-
   ReaderState copyWith({
     String? sessionId,
     String? title,
     String? content,
     List<Token>? tokens,
+    List<Paragraph>? paragraphs,
     int? index,
     int? wpm,
     bool? isPlaying,
@@ -64,12 +84,17 @@ class ReaderState {
     bool? isCompleted,
     ReadingMode? mode,
     bool? isLoadingAI,
+    bool? showContext,
+    bool? isAudioEnabled,
+    Set<int>? bookmarks,
+    bool? isReviewMode,
   }) =>
       ReaderState(
         sessionId: sessionId ?? this.sessionId,
         title: title ?? this.title,
         content: content ?? this.content,
         tokens: tokens ?? this.tokens,
+        paragraphs: paragraphs ?? this.paragraphs,
         index: index ?? this.index,
         wpm: wpm ?? this.wpm,
         isPlaying: isPlaying ?? this.isPlaying,
@@ -77,11 +102,18 @@ class ReaderState {
         isCompleted: isCompleted ?? this.isCompleted,
         mode: mode ?? this.mode,
         isLoadingAI: isLoadingAI ?? this.isLoadingAI,
+        showContext: showContext ?? this.showContext,
+        isAudioEnabled: isAudioEnabled ?? this.isAudioEnabled,
+        bookmarks: bookmarks ?? this.bookmarks,
+        isReviewMode: isReviewMode ?? this.isReviewMode,
       );
 }
 
+final bookmarkRepositoryProvider = Provider((ref) => BookmarkRepository());
+
 class ReaderController extends Notifier<ReaderState> {
   final FlutterTts _tts = FlutterTts();
+  final _uuid = const Uuid();
   DateTime? _sessionStartTime;
   int _wordsReadInCurrentSession = 0;
 
@@ -94,6 +126,7 @@ class ReaderController extends Notifier<ReaderState> {
       title: '',
       content: '',
       tokens: [],
+      paragraphs: [],
       index: 0,
       wpm: settings.defaultWpm,
       isPlaying: false,
@@ -101,50 +134,107 @@ class ReaderController extends Notifier<ReaderState> {
       isCompleted: false,
       mode: ReadingMode.rsvp,
       isLoadingAI: false,
+      bookmarks: {},
     );
   }
 
   void _initTts() {
     _tts.setCompletionHandler(() {
-      if (state.isPlaying) {
-        _onTtsComplete();
+      if (state.isPlaying && state.isAudioEnabled) {
+        _onParagraphComplete();
       }
     });
   }
 
   SessionRepository get _repo => ref.read(sessionRepositoryProvider);
+  BookmarkRepository get _bookmarkRepo => ref.read(bookmarkRepositoryProvider);
   Timer? _timer;
   DateTime? _nextTickAt;
+Future<void> toggleBookmark([int? targetIndex]) async {
+  final idx = targetIndex ?? state.index;
+  if (idx < 0 || idx >= state.tokens.length) return;
+
+  final currentWord = state.tokens[idx].word;
+  final bookmarkId = '${state.sessionId}_$idx';
+
+  // Update local state immediately for snappy UI
+  final newBookmarks = Set<int>.from(state.bookmarks);
+  final isAdding = !newBookmarks.contains(idx);
+
+  if (isAdding) {
+    newBookmarks.add(idx);
+  } else {
+    newBookmarks.remove(idx);
+  }
+  state = state.copyWith(bookmarks: newBookmarks);
+
+  // Persist to repository in background
+  if (isAdding) {
+    await _bookmarkRepo.add(Bookmark(
+      id: bookmarkId,
+      word: currentWord,
+      index: idx,
+      sessionId: state.sessionId,
+      sessionTitle: state.title,
+      createdAt: DateTime.now(),
+    ));
+  } else {
+    await _bookmarkRepo.delete(bookmarkId);
+  }
+
+  // Refresh the global bookmarks provider for other screens
+  ref.invalidate(bookmarksProvider);
+}
+
+Future<void> speakWords(String text) async {
+  await _tts.speak(text);
+}
 
   Future<void> loadText(String title, String content,
       {int? start, int? wpm}) async {
-    final tokens = tokenizeText(content);
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final paragraphs = paragraphize(content);
+    final tokens = paragraphs.expand((p) => p.tokens).toList();
+    final id = _uuid.v4();
     final settings = ref.read(settingsProvider);
+    
+    // Load existing bookmarks for this text (simple check by content hash or similar? for now text title)
+    // Actually, Text ID would be better.
+    
     state = state.copyWith(
       sessionId: id,
       title: title,
       content: content,
       tokens: tokens,
+      paragraphs: paragraphs,
       index: start ?? 0,
       wpm: wpm ?? settings.defaultWpm,
       chunkSize: settings.defaultChunkSize,
       isPlaying: false,
       isCompleted: false,
+      bookmarks: {},
     );
     await _persist();
   }
 
   Future<void> loadSession(Session s) async {
+    final paragraphs = paragraphize(s.content);
+    final tokens = paragraphs.expand((p) => p.tokens).toList();
+    
+    // Load bookmarks for this session
+    final bks = await _bookmarkRepo.bySession(s.id);
+    final bookmarkIndices = bks.map((b) => b.index).toSet();
+
     state = state.copyWith(
       sessionId: s.id,
       title: s.title,
       content: s.content,
-      tokens: tokenizeText(s.content),
+      tokens: tokens,
+      paragraphs: paragraphs,
       index: s.position,
       wpm: s.wpm,
       isPlaying: false,
       isCompleted: false,
+      bookmarks: bookmarkIndices,
     );
   }
 
@@ -153,22 +243,32 @@ class ReaderController extends Notifier<ReaderState> {
     state = state.copyWith(mode: mode);
   }
 
+  void toggleContext() {
+    state = state.copyWith(showContext: !state.showContext);
+  }
+
+  void toggleAudio() {
+    final newValue = !state.isAudioEnabled;
+    if (state.isPlaying && !newValue) _tts.stop();
+    state = state.copyWith(isAudioEnabled: newValue);
+    if (state.isPlaying && newValue) _speakCurrentParagraph();
+  }
+
   void play() {
     if (state.tokens.isEmpty || state.isCompleted) return;
     _wordsReadInCurrentSession = 0;
     _sessionStartTime = DateTime.now();
     state = state.copyWith(isPlaying: true);
 
-    if (state.mode == ReadingMode.audio) {
-      _startTts();
-    } else {
-      _scheduleNextTick(baseDelayForWpm(state.wpm));
+    if (state.isAudioEnabled) {
+      _speakCurrentParagraph();
     }
+    _scheduleNextTick(baseDelayForWpm(state.wpm));
   }
 
   Future<void> pause() async {
     _timer?.cancel();
-    if (state.mode == ReadingMode.audio) {
+    if (state.isAudioEnabled) {
       await _tts.stop();
     }
     
@@ -188,41 +288,24 @@ class ReaderController extends Notifier<ReaderState> {
     await _persist();
   }
 
-  void _startTts() async {
-    if (state.index >= state.tokens.length) return;
+  void _speakCurrentParagraph() async {
+    if (!state.isPlaying || !state.isAudioEnabled || state.paragraphs.isEmpty) return;
+    
+    final currentP = state.paragraphs[state.currentParagraphIndex];
     double rate = (state.wpm / 400).clamp(0.0, 1.0);
     await _tts.setSpeechRate(rate);
-    _speakNextWord();
+    await _tts.speak(currentP.text);
   }
 
-  void _speakNextWord() async {
-    if (!state.isPlaying || state.index >= state.tokens.length) {
-      if (state.index >= state.tokens.length) {
-        state = state.copyWith(isCompleted: true, isPlaying: false);
-      }
-      return;
-    }
-    final word = state.tokens[state.index].word;
-    await _tts.speak(word);
-  }
-
-  void _onTtsComplete() {
-    if (!state.isPlaying) return;
-    final nextIndex = state.index + 1;
-    _wordsReadInCurrentSession++;
-    if (nextIndex >= state.tokens.length) {
-      state = state.copyWith(index: nextIndex, isCompleted: true, isPlaying: false);
-      pause();
-    } else {
-      state = state.copyWith(index: nextIndex);
-      _speakNextWord();
-    }
+  void _onParagraphComplete() {
+    if (!state.isPlaying || !state.isAudioEnabled) return;
   }
 
   void setWpm(double value) {
     state = state.copyWith(wpm: value.round());
-    if (state.isPlaying && state.mode == ReadingMode.audio) {
-      _startTts();
+    if (state.isPlaying && state.isAudioEnabled) {
+      _tts.stop();
+      _speakCurrentParagraph();
     }
   }
 
@@ -232,26 +315,24 @@ class ReaderController extends Notifier<ReaderState> {
 
   Future<void> seekTo(double percent) async {
     final newIndex = (percent * (state.tokens.length - 1)).round().clamp(0, state.tokens.length - 1);
+    final oldParaIndex = state.currentParagraphIndex;
     state = state.copyWith(index: newIndex, isCompleted: false);
-    if (state.isPlaying && state.mode == ReadingMode.audio) {
-      _startTts();
+    
+    if (state.isPlaying && state.isAudioEnabled && state.currentParagraphIndex != oldParaIndex) {
+      _tts.stop();
+      _speakCurrentParagraph();
     }
     await _persist();
   }
 
   Future<void> jumpToIndex(int i) async {
+    final oldParaIndex = state.currentParagraphIndex;
     state = state.copyWith(index: i.clamp(0, state.tokens.length - 1), isCompleted: false);
-    if (state.isPlaying && state.mode == ReadingMode.audio) {
-      _startTts();
+    
+    if (state.isPlaying && state.isAudioEnabled && state.currentParagraphIndex != oldParaIndex) {
+      _tts.stop();
+      _speakCurrentParagraph();
     }
-    await _persist();
-  }
-
-  Future<void> skipSeconds(int seconds) async {
-    final wordsToSkip = (seconds * (state.wpm / 60)).round();
-    final newIndex = (state.index + wordsToSkip).clamp(0, state.tokens.length - 1);
-    state = state.copyWith(index: newIndex, isCompleted: false);
-    if (state.isPlaying && state.mode == ReadingMode.audio) _startTts();
     await _persist();
   }
 
@@ -266,10 +347,11 @@ class ReaderController extends Notifier<ReaderState> {
     try {
       final transformedText = await action(provider);
       if (transformedText.isNotEmpty) {
-        final newTokens = tokenizeText(transformedText);
+        final paragraphs = paragraphize(transformedText);
         state = state.copyWith(
           content: transformedText,
-          tokens: newTokens,
+          tokens: paragraphs.expand((p) => p.tokens).toList(),
+          paragraphs: paragraphs,
           index: 0,
           isCompleted: false,
           isLoadingAI: false,
@@ -286,26 +368,28 @@ class ReaderController extends Notifier<ReaderState> {
     }
   }
 
-  Future<void> next() async {
-    if (state.tokens.isEmpty) return;
-    state = state.copyWith(
-        index: (state.index + state.chunkSize).clamp(0, state.tokens.length - 1),
-        isCompleted: false);
-    if (state.isPlaying && state.mode == ReadingMode.audio) _startTts();
-    await _persist();
+  Future<void> nextParagraph() async {
+    if (state.paragraphs.isEmpty) return;
+    final currentPara = state.currentParagraphIndex;
+    if (currentPara < state.paragraphs.length - 1) {
+      jumpToIndex(state.paragraphs[currentPara + 1].globalStartIndex);
+    }
   }
 
-  Future<void> previous() async {
-    if (state.tokens.isEmpty) return;
-    state = state.copyWith(
-        index: (state.index - state.chunkSize).clamp(0, state.tokens.length - 1),
-        isCompleted: false);
-    if (state.isPlaying && state.mode == ReadingMode.audio) _startTts();
-    await _persist();
+  Future<void> previousParagraph() async {
+    if (state.paragraphs.isEmpty) return;
+    final currentPara = state.currentParagraphIndex;
+    if (currentPara > 0) {
+      jumpToIndex(state.paragraphs[currentPara - 1].globalStartIndex);
+    }
   }
 
-  Future<void> skipForward() async => skipSeconds(10);
-  Future<void> skipBackward() async => skipSeconds(-10);
+  Future<void> skipWords(int count) async {
+    jumpToIndex(state.index + count);
+  }
+
+  Future<void> skipForward() async => skipWords(2);
+  Future<void> skipBackward() async => skipWords(-2);
 
   void _scheduleNextTick(Duration fromNow) {
     _timer?.cancel();
@@ -321,9 +405,15 @@ class ReaderController extends Notifier<ReaderState> {
       return;
     }
 
+    final oldParaIndex = state.currentParagraphIndex;
     final nextIndex = (state.index + state.chunkSize).clamp(0, state.tokens.length - 1);
     state = state.copyWith(index: nextIndex);
     _wordsReadInCurrentSession += state.chunkSize;
+
+    if (state.isAudioEnabled && state.currentParagraphIndex != oldParaIndex) {
+      _tts.stop();
+      _speakCurrentParagraph();
+    }
 
     final base = baseDelayForWpm(state.wpm);
     final settings = ref.read(settingsProvider);

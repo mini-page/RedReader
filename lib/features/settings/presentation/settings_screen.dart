@@ -159,6 +159,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               isDark: isDark,
             ),
             _buildDivider(isDark),
+            _buildSwitchTile(
+              title: 'Show navigation labels',
+              subtitle: 'Bottom bar text',
+              value: settings.showNavLabels,
+              onChanged: (v) =>
+                  controller.update(settings.copyWith(showNavLabels: v)),
+              isDark: isDark,
+            ),
+            _buildDivider(isDark),
             _buildColorPicker(
               title: 'Focal letter color',
               subtitle: 'The letter your eye locks onto',

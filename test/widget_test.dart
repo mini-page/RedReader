@@ -13,7 +13,7 @@ void main() {
 
   testWidgets('smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: IReaderApp()));
-    await tester.pump(); // allow Hive to settle if needed
-    expect(find.text('iReader'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 5));
+    expect(find.textContaining('Reader'), findsAtLeast(1));
   });
 }

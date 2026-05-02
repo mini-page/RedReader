@@ -7,8 +7,12 @@ void main() {
   testWidgets('reader screen renders controls', (tester) async {
     await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: ReaderScreen())));
-    expect(find.byType(Slider), findsOneWidget);
-    // New UI uses Icons.play_arrow_rounded when not playing
+    
+    // Tap settings button to show the popup which contains the sliders
+    await tester.tap(find.byIcon(Icons.tune_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Slider), findsAtLeast(1));
     expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
   });
 }

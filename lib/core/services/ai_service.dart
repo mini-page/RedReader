@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'secure_storage_service.dart';
+import 'wikipedia_service.dart';
 
 abstract class AIProvider {
   Future<String> summarize(String text);
@@ -16,6 +17,7 @@ class GeminiClient implements AIProvider {
   final String apiKey;
   final String modelName;
   final String apiVersion;
+  final WikipediaService _wikiService = WikipediaService();
 
   GeminiClient(this.apiKey, {
     this.modelName = 'gemini-2.0-flash-lite', 
@@ -110,20 +112,14 @@ class GeminiClient implements AIProvider {
 
   @override
   Future<String> fetchUrl(String url) async {
-    // Basic implementation: Use an AI call to "clean" the URL content or a specialized service
-    // For now, we'll try to fetch and let AI clean it if possible, but standard CORS/Mobile issues apply.
-    // We'll use a public proxy or AI-driven extraction if available.
     return _generate('Extract the main article text from this URL and return it as clean, structured plain text.', url);
   }
 
   @override
   Future<String> fetchWikipedia(String title) async {
-    final response = await http.get(Uri.parse('https://en.wikipedia.org/api/rest_v1/page/summary/${Uri.encodeComponent(title)}'));
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final extract = data['extract'] ?? '';
-      // Fetch full content if summary is too short
-      return _generate('Expand this Wikipedia summary into a full-length readable article for a deep-dive session.', extract);
+    final fullContent = await _wikiService.fetchFullContent(title);
+    if (fullContent.isNotEmpty) {
+      return fullContent;
     }
     throw Exception('Failed to fetch Wikipedia article.');
   }

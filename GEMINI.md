@@ -1,27 +1,137 @@
-# iReader: READ FAST, THINK DEEP
+# GEMINI CONTROL FILE — iReader
 
-## Project Mission
-iReader is a hybrid AI-assisted cognitive reading system designed to maximize reading efficiency while deepening comprehension through deterministic RSVP engines and optional AI-powered transformation layers.
+## PRIMARY OBJECTIVE
+Refactor, optimize, and standardize the entire Flutter codebase into a scalable, modular, high-performance system.
 
-## Core Mandates
-1. **Performance First**: The reading engine must remain silky smooth. UI threads must never be blocked by AI processing.
-2. **Stateless AI**: AI features are optional utility layers. The app must always function locally without an internet connection or API keys.
-3. **Data Privacy**: API keys must be stored in Secure Storage and never logged or sent to any telemetry.
+## CORE PRINCIPLES
+- Single responsibility per module
+- No duplicated logic
+- Unified data pipeline
+- Zero layout instability in reader
+- Performance-first decisions
 
-## Architecture
-- **Features-First**: Organized by domain (Main, Home, Reader, Library, Settings, Stats).
-- **State Management**: Riverpod 3.0+ using `Notifier` and `AsyncNotifier`.
-- **Navigation**: GoRouter with `MainScaffold` providing Bottom Navigation.
-- **Reading Engine**: Supports RSVP, Scroll, and Audio (TTS) modes.
+---
 
-## Development Status
-- [x] **Phase 1**: Navigation Foundation & Secure Storage.
-- [x] **Phase 2**: Multi-mode Reading (Scroll & Audio).
-- [x] **Phase 3**: AI Integration Layer (Summarize, Simplify, Translate).
-- [x] **Phase 4**: Cognitive Analytics (Tracking & Stats).
+## EXECUTION MODES
 
-## Context Map
-- `lib/features/reader/`: The core reading logic and engine.
-- `lib/features/main/`: Bottom navigation and scaffold.
-- `lib/core/services/`: Shared services like Secure Storage.
-- `lib/shared/models/`: App-wide data structures.
+### MODE 1: PLAN
+- Scan full repo
+- Identify:
+  - Dead code
+  - Duplicate logic
+  - Over-engineered structures
+  - Heavy assets
+- Output structured refactor plan
+
+### MODE 2: EXECUTE
+- Apply refactor step-by-step
+- Validate after each change
+- Update memory.md continuously
+
+### MODE 3: VERIFY
+- Run static checks
+- Ensure no broken imports
+- Validate build success
+
+---
+
+## MANDATORY RULES
+
+- NEVER break reader engine stability
+- NEVER introduce unnecessary dependencies
+- ALWAYS centralize logic
+- ALWAYS update memory.md after changes
+
+---
+
+## TARGET ARCHITECTURE
+
+Feature-first modular system:
+
+lib/
+  core/
+  features/
+  shared/
+
+NO FLAT STRUCTURES.
+
+---
+
+## PERFORMANCE RULES
+
+- Avoid rebuild-heavy widgets
+- Use ValueNotifier / Riverpod
+- Precompute tokens
+- No runtime parsing during playback
+
+---
+
+## FILE SIZE OPTIMIZATION
+
+- Remove unused assets
+- Compress images (WebP)
+- Strip debug logs
+- Use tree shaking
+- Avoid heavy packages
+
+---
+
+## CLEANUP RULES
+
+REMOVE:
+- Unused imports
+- Dead files
+- Duplicate widgets
+- Test junk not used
+
+MERGE:
+- Utility files
+- Repeated UI components
+
+---
+
+## MEMORY TRACKING
+
+All actions must be logged in:
+
+/memory.md
+
+---
+
+## COMMANDS
+
+### /analyze
+Scan repo → return issues
+
+### /refactor
+Apply structural improvements
+
+### /optimize
+Reduce size + improve performance
+
+### /verify
+Check build + errors
+
+### /rebuild-reader
+Reconstruct reader engine cleanly
+
+---
+
+## HOOKS
+
+ON FILE CHANGE:
+- Re-run dependency graph check
+
+ON BUILD FAIL:
+- rollback last step using memory.md
+
+ON NEW FEATURE:
+- place inside correct feature module
+
+---
+
+## OUTPUT STYLE
+
+- Structured
+- No verbosity
+- Code-first

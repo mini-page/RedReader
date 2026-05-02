@@ -31,6 +31,7 @@ class SettingsController extends Notifier<AppSettings> {
           state.hasCompletedOnboarding,
       hasRunDemo: prefs.getBool('hasRunDemo') ?? state.hasRunDemo,
       hideStatusBar: hideStatusBar,
+      showNavLabels: prefs.getBool('showNavLabels') ?? state.showNavLabels,
     );
     _applySystemUi(hideStatusBar);
   }
@@ -58,6 +59,7 @@ class SettingsController extends Notifier<AppSettings> {
     await prefs.setBool('hasCompletedOnboarding', next.hasCompletedOnboarding);
     await prefs.setBool('hasRunDemo', next.hasRunDemo);
     await prefs.setBool('hideStatusBar', next.hideStatusBar);
+    await prefs.setBool('showNavLabels', next.showNavLabels);
 
     if (hideStatusBarChanged) {
       _applySystemUi(next.hideStatusBar);
